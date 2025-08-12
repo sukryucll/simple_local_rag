@@ -1,70 +1,56 @@
-# src/embedding.py
-import os
-import sys
+# embedding.py
+import os, sys, math
+import pandas as pd
 import torch
+from transformers import AutoTokenizer, AutoModel
 
-# Proje kökünü bulup path'e ekle
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from config import HF_MODEL, CHUNKS_CSV, EMBEDDINGS_CSV
-import pandas as pd
-from transformers import AutoTokenizer, AutoModel
+from config import HF_MODEL, E5_USE_PREFIXES
+from config import CHUNKS_CSV, EMBEDDINGS_CSV
 
-# Manuel tokenizasyon + pooling ile embedding fonksiyonu
-def embed_chunks_manual(
-    chunk_csv: str = CHUNKS_CSV,
-    out_csv: str   = EMBEDDINGS_CSV,
-    model_name: str= HF_MODEL,
-    pooling: str   = "mean"
-) -> pd.DataFrame:
-    """
-    1. CHUNKS_CSV'i oku
-    2. Tokenizer ve model yükle
-    3. Tokenize et (padding, truncation)
-    4. Modelden last_hidden_state al
-    5. Mean pooling ile cümle embedding'i oluştur
-    6. DataFrame'e ekle ve kaydet
-    """
-    # 1) Metin parçalarını oku
-    df = pd.read_csv(chunk_csv)
-    texts = df['chunk'].fillna(" ").astype(str).tolist()
+def _mean_pool(last_hidden_state, attention_mask):
+    mask = attention_mask.unsqueeze(-1)               # [B,L,1]
+    summed = (last_hidden_state * mask).sum(dim=1)    # [B,D]
+    lengths = mask.sum(dim=1).clamp_min(1)            # [B,1]
+    return summed / lengths                           # [B,D]
 
-    # 2) Tokenizer ve model
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model     = AutoModel.from_pretrained(model_name)
-    model.eval()
+@torch.inference_mode()
+def embed_chunks(batch_size: int = 64):
+    if not os.path.exists(CHUNKS_CSV):
+        raise FileNotFoundError(f"Missing {CHUNKS_CSV}")
 
-    # 3) Tokenize tüm metinleri
-    tokens = tokenizer(
-        texts,
-        padding=True,
-        truncation=True,
-        return_tensors="pt"
-    )
+    df = pd.read_csv(CHUNKS_CSV)
+    texts = df["chunk"].fillna(" ").astype(str).tolist()
 
-    # 4) Modelden çıkar
-    with torch.no_grad():
-        outputs = model(**tokens)
-        hidden_states = outputs.last_hidden_state  # [B, L, D]
+    if E5_USE_PREFIXES:
+        # E5 önerisi (isteğe bağlı): "passage: "
+        texts = ["passage: " + t for t in texts]
 
-    # 5) Pooling
-    mask = tokens['attention_mask'].unsqueeze(-1)  # [B, L, 1]
-    masked_states = hidden_states * mask           # pad token'ları sıfırladı
-    sum_states = masked_states.sum(dim=1)          # [B, D]
-    lengths = mask.sum(dim=1)                     # [B, 1]
-    embeddings = sum_states / lengths             # [B, D]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tok = AutoTokenizer.from_pretrained(HF_MODEL)
+    mdl = AutoModel.from_pretrained(HF_MODEL).to(device).eval()
 
-    # 6) DataFrame'e ekle
-    emb_df = pd.DataFrame(embeddings.cpu().numpy())
-    out_df = pd.concat([df[['page', 'chunk']].reset_index(drop=True), emb_df], axis=1)
+    embs = []
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i:i+batch_size]
+        batch = tok(batch_texts, padding=True, truncation=True, return_tensors="pt").to(device)
+        out = mdl(**batch).last_hidden_state           # [B,L,D]
+        pooled = _mean_pool(out, batch["attention_mask"]).cpu()  # [B,D]
+        embs.append(pooled)
 
-    # 7) Kaydet
-    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
-    out_df.to_csv(out_csv, index=False, encoding='utf-8')
-    print(f"{len(texts)} chunks manually embedded → {out_csv}")
+        print(f"→ embedded {min(i+batch_size, len(texts))}/{len(texts)}", end="\r")
+
+    embs = torch.cat(embs, dim=0).numpy()             # [N,D]
+    emb_df = pd.DataFrame(embs)                       # columns: 0..D-1
+    out_df = pd.concat([df[["page", "chunk"]].reset_index(drop=True), emb_df], axis=1)
+
+    os.makedirs(os.path.dirname(EMBEDDINGS_CSV), exist_ok=True)
+    out_df.to_csv(EMBEDDINGS_CSV, index=False, encoding="utf-8")
+    print(f"\n✅ {len(texts)} chunks embedded → {EMBEDDINGS_CSV}")
     return out_df
 
 if __name__ == "__main__":
-    embed_chunks_manual()
+    embed_chunks()

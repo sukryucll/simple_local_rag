@@ -3,4 +3,4 @@ transformers
 sentence-transformers
 PyMuPDF
 pandas
-requests
+chromadb
