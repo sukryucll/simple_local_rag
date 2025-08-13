@@ -1,6 +1,6 @@
 # src/ingestion.py
 import os, sys
-import fitz  # PyMuPDF
+import fitz  
 import pandas as pd
 
 # Proje kökünü ekle

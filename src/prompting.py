@@ -2,7 +2,6 @@
 import os, sys
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Proje kökünü path'e ekle
 ROOT    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_DIR = os.path.join(ROOT, "src")
 if SRC_DIR not in sys.path:

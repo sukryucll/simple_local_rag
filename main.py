@@ -1,5 +1,4 @@
 # main.py (root)
-
 import os
 import sys
 import pandas as pd
@@ -80,14 +79,14 @@ def run(query: str, top_k: int = 5):
     # 0) Gerekli verileri hazırla (embed + index gerekirse)
     prepare_data()
 
-    # 0.1) Opsiyonel eşik ve A/B görünürlüğü (config'te yoksa varsayılan kullan)
+    # 0.1) Opsiyonel eşik ve A/B görünürlüğü (config'te yoksa varsayılan kullanır)
     try:
         from config import RERANK_GATE_THRESHOLD, VERBOSE_AB
     except Exception:
         RERANK_GATE_THRESHOLD = 0.85  # base top1 skoru bunun altındaysa reranker tetikler
         VERBOSE_AB = False            # True yaparsan mini A/B çıktısı basar
 
-    # 1) Önce saf Chroma ile getir (biraz geniş tut ki gerekirse kıyaslayalım)
+    # 1) Önce saf Chroma ile getir (biraz geniş tutuluyor çünkü gerekirse kıyaslayalım)
     candidate_k = max(top_k, CANDIDATE_K) if isinstance(CANDIDATE_K, int) else top_k
     base_hits = retrieve_top_k(query, k=candidate_k)
     if not base_hits:
@@ -110,7 +109,7 @@ def run(query: str, top_k: int = 5):
                 top_k=top_k,
                 w_ce=W_CE, w_sim=W_SIM, w_lex=W_LEX
             )
-            if rer:  # güvenli
+            if rer: 
                 hits = rer
                 used_reranker = True
 
@@ -153,7 +152,6 @@ def run(query: str, top_k: int = 5):
     prompt   = format_prompt(query, contexts)
     answer   = ask_llm(prompt)
 
-    # 5) Cevabı göster
     print("\n=== Answer ===\n")
     print(answer)
 

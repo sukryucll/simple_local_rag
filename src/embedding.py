@@ -49,7 +49,7 @@ def embed_chunks(batch_size: int = 64):
 
     os.makedirs(os.path.dirname(EMBEDDINGS_CSV), exist_ok=True)
     out_df.to_csv(EMBEDDINGS_CSV, index=False, encoding="utf-8")
-    print(f"\n✅ {len(texts)} chunks embedded → {EMBEDDINGS_CSV}")
+    print(f"\n{len(texts)} chunks embedded → {EMBEDDINGS_CSV}")
     return out_df
 
 if __name__ == "__main__":

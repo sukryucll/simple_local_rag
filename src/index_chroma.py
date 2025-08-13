@@ -54,7 +54,7 @@ def build_index(batch_size: int = 1000):
         e = min(s + batch_size, n)
         coll.add(ids=ids[s:e], documents=docs[s:e], metadatas=metas[s:e], embeddings=embs[s:e])
         print(f"→ Added {e}/{n}")
-    print(f"✅ Indexed {n} chunks into Chroma → {CHROMA_DIR}/{CHROMA_COLLNAME}")
+    print(f"Indexed {n} chunks into Chroma → {CHROMA_DIR}/{CHROMA_COLLNAME}")
 
 if __name__ == "__main__":
     build_index()
